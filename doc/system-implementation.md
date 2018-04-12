@@ -276,7 +276,7 @@ The Spark Sink sends the data to Spark for further processing and aggregation. A
 - Push-based
 - Pull-based.
 
-In the first approach, Spark acts like a Flume Avro Source, thus the Spark Sink simply becomes a built-in [Avro Sink](http://flume.apache.org/FlumeUserGuide.html#avro-sink). The Avro Source-Sink are preferred components for transfer data between Flume agents and are implemented with RPC server-client communication.
+In the first approach, Spark acts like a Flume Avro Source, thus the Spark Sink simply becomes a built-in [Avro Sink](http://flume.apache.org/FlumeUserGuide.html#avro-sink). The Avro data serialisation is recommended way of transferring the data between Flume agents and is implemented as RPC.
 In the second approach, the Spark Sink buffers the events while "Spark uses a reliable Flume receiver and transactions to pull data from the sink".
 
 Currently Push is used as Pull approach has some undesired effects:
@@ -293,17 +293,13 @@ Some of the processing task defined in the  Section 2 could be managed by Flume,
 The more advanced processing requires a dedicated software. [Apache Spark](https://spark.apache.org/), "a fast and general-purpose engine for large-scale data processing", was selected for this role.
 
 Spark is able to execute both batch and streaming jobs. Spark executes streaming jobs by splitting the input data stream into batches of input data (RDD) which are processed using the batch functions.
-The Map functions fulfill the enrichment task, since acts event per event, whereas Reduce functions fulfill the aggregation task, since they operate on the data belonging to the same RDD.
+The Map functions fulfil the enrichment task, since acts event per event, whereas Reduce functions fulfil the aggregation task, since they operate on the data belonging to the same RDD.
 
 Spark will run together with Apache Mesos in order to provide High Availability which resubmits failed jobs.
 
 #### 3.3.1 Streaming Aggregator
-The job receives Flume events from the Spark Sink and computes the aggregated value. Since the Pull-approach has been selected, the Spark Sink is an Avro Flume that sends Avro events. The job splits the event stream in batches of data depending on the time window, parameter defined in the code, and on each single batch map-reduce functions could be used. Spark provides a large set of functions and for this use-case the `reduceByKeyAndWindow` function has been selected: merges key-value data having the same key and within the same time window using an user defined function. Depending on how the key field is created from the Avro event, different aggregation level could be obtained. E.g. excluding the host tag in the key field, an average value representative of all hosts is returned.
-
-The streaming job:
-- extracts the key-value pair from the received Avro event
-- evaluates the average value from data having the same key and within the same time window
-- sends the aggregated value back to Flume backend (UDP/JSON or Avro event) 
+A job receives Flume events from the Spark (Avro) Sink using Pull-based approach and computes the aggregated value. The job splits the event stream into batches of data based on the time window size, `code` parameter and type of map-reduce function applied. Spark provides a large set of functions and for the streaming aggregation the `reduceByKeyAndWindow` function is used. This function merges key-value data of the same key and within the same time window using a user defined function. Depending on how the key field is created from the Avro event, different aggregation level could be obtained. E.g. excluding the host tag in the key field, an average value representative of all hosts is returned.
+Then, the derived value is sent back to Flume using Avro).
 
 The information how build and configure Spark Streaming Aggregator are provided in the [GitHub README](https://github.com/AliceO2Group/MonitoringCustomComponents/tree/master/spark-streaming-aggregator).
 
@@ -312,16 +308,15 @@ The goal of the storage is to archive time-series metrics for the historical das
 
 [InfluxDB](https://docs.influxdata.com/influxdb/v1.5/) is a "custom high-performance data store written specifically for time series data. It allows for high throughput ingest, compression and real-time querying of that same data".
 
-Further features are:
-- Acquire data both in HTTP or TCP.
-- Query aggregated data using the [InfluxDB SQL-like Query Language](https://docs.influxdata.com/influxdb/v1.5/query_language/data_exploration/).
-- Tags could be added to series to be "indexed for fast and a efficient queries".
-- Supports [Continuous Queries and Retention Policies](https://docs.influxdata.com/influxdb/v1.5/guides/downsampling_and_retention/), that help to automate the process of downsampling data.
+It features:
+- HTTP or UDP endpoints to acquire the data.
+- [InfluxDB SQL-like Query Language](https://docs.influxdata.com/influxdb/v1.5/query_language/data_exploration/).
+- Metric with custom tags what provides "fast and a efficient queries".
+- [Continuous Queries and Retention Policies](https://docs.influxdata.com/influxdb/v1.5/guides/downsampling_and_retention/), that help to automate the process of downsampling data.
 
-After the installation, InfluxDB provides a ready-to-use HTTP API in order to write and query data easily. The default port is the `8086`. As described in the [Writing data with the HTTP API page](https://docs.influxdata.com/influxdb/v1.5/guides/writing_data/), data can be written using a HTTP/POST with a data coded using InfluxDB Line Protocol. Whereas, data can be queried using a HTTP/GET with the InfluxDB SQL-like Query Language, as described in the [Querying data with the HTTP API page](https://docs.influxdata.com/influxdb/v1.5/guides/querying_data/).
+After the installation, InfluxDB starts with open HTTP endpoint on port `8086`. As described in the [Writing data with the HTTP API page](https://docs.influxdata.com/influxdb/v1.5/guides/writing_data/), data can be written using a HTTP POST using InfluxDB Line Protocol. Whereas, metric can be queried using a HTTP GET using InfluxDB Query Language, as described in the [Querying data with the HTTP API page](https://docs.influxdata.com/influxdb/v1.5/guides/querying_data/).
 
 An example of writing and querying commands are provided:
-
 ```
 curl -i -XPOST 'http://localhost:8086/write?db=mydb' --data-binary \
 'cpu_load_short,host=server01,region=us-west value=0.64 1434055562000000000'
@@ -343,7 +338,7 @@ The TCP communication has been selected since tests shown better throughput and 
   read-buffer = 8388608
 ```
 
-As show in the above configuration section, a database must be associated to a given UDP port. 
+As show in the above configuration section, a database must be associated to a given UDP port.
 The data within the packet must be coded using the InfluxDB Line Protocol, like HTTP.
 
 An example:
